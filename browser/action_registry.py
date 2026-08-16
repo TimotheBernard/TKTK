@@ -1,0 +1,13 @@
+ACTION_CATALOG = [
+    "OPEN_PROFILE",
+    "OPEN_POST",
+    "OPEN_URL",
+    "WATCH",
+    "SCROLL",
+    "WAIT",
+    "WAIT_RANDOM",
+    "CHECK_PAGE",
+    "CHECK_SESSION",
+    "USER_CONFIRMATION",
+    "PUBLISH_POST",
+]
