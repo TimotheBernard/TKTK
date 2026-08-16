@@ -8,6 +8,7 @@
 !/logs/.htaccess
 /selenium/profiles/*
 !/selenium/profiles/.htaccess
+!/selenium/profiles/_watcher/
 !/selenium/profiles/_watcher/.gitkeep
 /selenium/logs/*.log
 !/selenium/logs/.gitkeep
