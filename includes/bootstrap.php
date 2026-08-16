@@ -31,6 +31,7 @@ require_once __DIR__ . '/../services/TaskService.php';
 require_once __DIR__ . '/../services/PostService.php';
 require_once __DIR__ . '/../services/SchedulerService.php';
 require_once __DIR__ . '/../services/SimulationService.php';
+require_once __DIR__ . '/../services/SeleniumService.php';
 
 final class App
 {

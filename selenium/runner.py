@@ -22,7 +22,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="TikTok Manager Selenium runner")
     parser.add_argument("--account-id")
     parser.add_argument("--profile")
-    parser.add_argument("--action", required=True, choices=["open_url", "open_profile", "open_post", "check_session", "list_profile_posts"])
+    parser.add_argument("--action", required=True, choices=["open_url", "open_profile", "open_post", "check_session", "list_profile_posts", "launch"])
     parser.add_argument("--url", default="")
     parser.add_argument("--username", default="")
     parser.add_argument("--limit", type=int, default=8)
@@ -48,6 +48,13 @@ def main() -> None:
             chrome_path=settings.get("chrome_path") or "",
             timeout=int(settings.get("browser_timeout_seconds") or 30),
         )
+        if args.action == "launch":
+            url = args.url
+            if not url and username:
+                handle = username if str(username).startswith("@") else f"@{username}"
+                url = f"https://www.tiktok.com/{handle}"
+            launched = manager.launch_detached(url or "https://www.tiktok.com/")
+            emit({"success": True, "error": None, **launched})
         driver = manager.start()
         actions = BrowserActions(driver)
         result: dict = {"success": True, "error": None}

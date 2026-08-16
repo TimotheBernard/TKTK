@@ -46,12 +46,19 @@ function api_handle(callable $fn): never
             'DEV_MODE_REQUIRED' => 'Development mode is disabled',
             'STORAGE_ERROR' => 'Storage error',
             'UNAUTHORIZED' => 'Authentication required',
+            'INVALID_PASSWORD' => 'Mot de passe actuel incorrect',
+            'PASSWORD_MISMATCH' => 'Les mots de passe ne correspondent pas',
+            'PASSWORD_TOO_SHORT' => 'Le mot de passe doit contenir au moins 8 caractères',
+            'BROWSER_START_FAILED' => 'Impossible de démarrer Chrome',
         ];
         if ($code === 'ACCOUNT_NOT_FOUND' || $code === 'ARTIST_NOT_FOUND' || $code === 'POST_NOT_FOUND' || $code === 'TASK_NOT_FOUND' || $code === 'RULE_NOT_FOUND' || $code === 'TARGET_NOT_FOUND') {
             $status = 404;
         }
         if ($code === 'DEV_MODE_REQUIRED') {
             $status = 403;
+        }
+        if ($code === 'UNAUTHORIZED' || $code === 'INVALID_PASSWORD') {
+            $status = $code === 'UNAUTHORIZED' ? 401 : 400;
         }
         if ($code === 'STORAGE_ERROR') {
             $status = 500;

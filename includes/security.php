@@ -94,6 +94,28 @@ final class Security
         session_destroy();
     }
 
+    public static function changePassword(string $userId, string $current, string $new, string $confirm): void
+    {
+        if (strlen($new) < 8) {
+            throw new RuntimeException('PASSWORD_TOO_SHORT');
+        }
+        if ($new !== $confirm) {
+            throw new RuntimeException('PASSWORD_MISMATCH');
+        }
+        $user = App::storage()->findById('users', $userId);
+        if ($user === null) {
+            throw new RuntimeException('UNAUTHORIZED');
+        }
+        if (!password_verify($current, (string) ($user['password_hash'] ?? ''))) {
+            throw new RuntimeException('INVALID_PASSWORD');
+        }
+        App::storage()->update('users', $userId, [
+            'password_hash' => password_hash($new, PASSWORD_DEFAULT),
+            'password_changed_at' => now_utc(),
+        ]);
+        Logger::app('PASSWORD_CHANGED ' . (string) ($user['username'] ?? $userId));
+    }
+
     public static function isApi(): bool
     {
         $uri = $_SERVER['REQUEST_URI'] ?? '';

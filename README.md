@@ -8,7 +8,7 @@ Architecture : voir [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 - URL locale : `http://127.0.0.1:8080`
 - Utilisateur : `admin`
-- Mot de passe initial : `changeme` (à changer après installation)
+- Mot de passe initial : `changeme` — à changer depuis **Paramètres → Mot de passe du dashboard**
 
 Les répertoires `data/`, `logs/` et `selenium/profiles/` ne sont pas exposés HTTP (`router.php` + `.htaccess`).
 
@@ -19,11 +19,13 @@ php -S 127.0.0.1:8080 router.php
 python3 worker/scheduler_worker.py
 ```
 
-Selenium (optionnel, détection automatique et ouverture des posts) :
+Selenium (détection automatique et ouverture des posts) :
 
 ```bash
 pip install -r selenium/requirements.txt
 ```
+
+Ensuite, dans **Paramètres** : **Connecter le watcher** (login TikTok dans Chrome), puis **Tester la session**. Pour chaque compte géré : **Ouvrir TikTok** puis **Tester**.
 
 En `dev_mode`, le dashboard peut simuler un `NEW_POST` sans TikTok. Si `selenium_enabled` est false, le worker marque les tâches comme ouvertes (simulation).
 

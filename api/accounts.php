@@ -52,20 +52,15 @@ api_handle(function () use ($method, $action, $id): void {
         }
         ApiResponse::success(['account' => $account]);
     }
-    if ($method === 'POST' && $id !== '' && in_array($action, ['test_session', 'open_tiktok'], true)) {
+    if ($method === 'POST' && $id !== '' && $action === 'test_session') {
         $account = $accounts->get($id);
         if ($account === null) {
             throw new RuntimeException('ACCOUNT_NOT_FOUND');
         }
-        $cmd = App::settings()->get()['python_path'] . ' ' . escapeshellarg(SELENIUM_PATH . '/runner.py')
-            . ' --account-id ' . escapeshellarg($id)
-            . ' --action ' . escapeshellarg($action === 'open_tiktok' ? 'open_profile' : 'check_session');
-        $output = [];
-        $code = 0;
-        exec($cmd . ' 2>&1', $output, $code);
-        $raw = implode("\n", $output);
-        $decoded = json_decode($raw, true);
-        $data = is_array($decoded) ? $decoded : ['raw' => $raw, 'exit_code' => $code];
+        $data = SeleniumService::run([
+            'account-id' => $id,
+            'action' => 'check_session',
+        ]);
         if (isset($data['session_status'])) {
             $accounts->update($id, [
                 'session_status' => $data['session_status'],
@@ -74,6 +69,17 @@ api_handle(function () use ($method, $action, $id): void {
             ]);
         }
         ApiResponse::success(['account' => $accounts->get($id), 'runner' => $data]);
+    }
+    if ($method === 'POST' && $id !== '' && $action === 'open_tiktok') {
+        $account = $accounts->get($id);
+        if ($account === null) {
+            throw new RuntimeException('ACCOUNT_NOT_FOUND');
+        }
+        $data = SeleniumService::launchAccount($id, (string) ($account['username'] ?? ''));
+        if (empty($data['success'])) {
+            throw new RuntimeException((string) (($data['error']['code'] ?? '') ?: 'BROWSER_START_FAILED'));
+        }
+        ApiResponse::success(['account' => $account, 'runner' => $data]);
     }
     ApiResponse::error('VALIDATION_ERROR', 'Unsupported method', 405);
 });

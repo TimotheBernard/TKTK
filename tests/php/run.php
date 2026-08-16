@@ -65,5 +65,27 @@ assert_true($parsed['video_id'] === '1234567890', 'video id extracted');
 $account = App::accounts()->create(['label' => 'N+1 dynamic']);
 assert_true(str_starts_with($account['id'], 'account_'), 'dynamic account id');
 
+try {
+    Security::changePassword('user_001', 'wrong', 'newpass12', 'newpass12');
+    assert_true(false, 'wrong current password rejected');
+} catch (RuntimeException $e) {
+    assert_true($e->getMessage() === 'INVALID_PASSWORD', 'wrong current password rejected');
+}
+try {
+    Security::changePassword('user_001', 'changeme', 'short', 'short');
+    assert_true(false, 'short password rejected');
+} catch (RuntimeException $e) {
+    assert_true($e->getMessage() === 'PASSWORD_TOO_SHORT', 'short password rejected');
+}
+try {
+    Security::changePassword('user_001', 'changeme', 'newpass12', 'otherpass');
+    assert_true(false, 'mismatch rejected');
+} catch (RuntimeException $e) {
+    assert_true($e->getMessage() === 'PASSWORD_MISMATCH', 'mismatch rejected');
+}
+Security::changePassword('user_001', 'changeme', 'newpass12', 'newpass12');
+$hash = App::storage()->findById('users', 'user_001')['password_hash'] ?? '';
+assert_true(password_verify('newpass12', (string) $hash), 'password updated');
+
 echo $failed === 0 ? "\nAll PHP tests passed\n" : "\n$failed test(s) failed\n";
 exit($failed === 0 ? 0 : 1);
