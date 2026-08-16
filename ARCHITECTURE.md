@@ -1,8 +1,15 @@
 # Architecture — TikTok Multi-Account Manager (V1)
 
-**Statut :** proposition d’architecture — en attente de validation avant toute génération de code applicatif.
+**Statut :** proposition d’architecture — validation en cours, pas encore de code applicatif.
 
 Ce document répond aux 15 livrables demandés. Il ne contient pas l’implémentation.
+
+### Décisions déjà validées
+
+| # | Sujet | Décision |
+| --- | --- | --- |
+| 2 | Warmup Chrome | **OK.** `browser_warmup_seconds` (défaut 8). `scheduled_at` inchangé. |
+| 3 | Détection V1 | **Option B.** Poller Selenium des profils artistes (pas seulement l’ajout manuel). |
 
 ---
 
@@ -88,6 +95,7 @@ tiktok-manager/
 │       ├── ManualPostProvider.php
 │       ├── OfficialApiPostProvider.php
 │       ├── ImportPostProvider.php
+│       ├── SeleniumWatchPostProvider.php  # Ingest des posts vus par le poller
 │       └── SimulationPostProvider.php
 │
 ├── services/
@@ -120,6 +128,7 @@ tiktok-manager/
 │   ├── settings.json
 │   ├── users.json                 # Auth dashboard (hash, pas de secret TikTok)
 │   ├── worker_state.json          # Heartbeat du worker Python
+│   ├── watcher_state.json         # Cycle de surveillance artistes
 │   └── backups/
 │       └── .htaccess
 │
@@ -128,7 +137,8 @@ tiktok-manager/
 │   ├── queue_manager.py           # File globale = tasks.json
 │   ├── json_store.py              # Verrouillage compatible PHP flock
 │   ├── task_runner.py             # Exécute UNE tâche, isole les erreurs
-│   └── worker_state.py
+│   ├── worker_state.py
+│   └── watch_loop.py              # Poller artistes — profil Chrome _watcher
 │
 ├── selenium/
 │   ├── runner.py                  # Point d’entrée CLI (une tâche / une action)
@@ -139,6 +149,7 @@ tiktok-manager/
 │   ├── logger.py
 │   ├── requirements.txt
 │   ├── profiles/                  # INTERDIT en HTTP — un dossier par account_id
+│   │   ├── _watcher/              # Session dédiée à la détection (pas un compte géré)
 │   │   └── .htaccess
 │   └── logs/
 │       └── .htaccess
@@ -171,6 +182,7 @@ tiktok-manager/
 | `account.php`, `logs.php` | Fiche compte et supervision demandées |
 | `json_store.py` | Même protocole de lock que PHP (`flock` / `fcntl`) |
 | `task_runner.py` | Isolation d’erreur par tâche, hors Selenium |
+| `watch_loop.py` + `profiles/_watcher/` | Détection auto option B, isolée des comptes gérés |
 
 ---
 
@@ -196,7 +208,7 @@ tiktok-manager/
 │  Services métier                                                │
 │  Account · Artist · Target · Post · Rule · Task · Event         │
 │  History · Stats · Settings · Backup · TikTok (URLs)            │
-│  Providers de posts (officiel / manuel / import / simulation)   │
+│  Providers de posts (Selenium watch / manuel / import / officiel / simulation)   │
 └──────────────────────────────┬──────────────────────────────────┘
                                │ StorageInterface
                                ▼
@@ -209,6 +221,7 @@ tiktok-manager/
 ┌─────────────────────────────────────────────────────────────────┐
 │  Worker Python persistant                                       │
 │  scheduler_worker.py → queue_manager.py → task_runner.py        │
+│                    ↳ watch_loop.py (profil _watcher)            │
 └──────────────────────────────┬──────────────────────────────────┘
                                │ subprocess / module local
                                ▼
@@ -218,12 +231,11 @@ tiktok-manager/
 └──────────────────────────────┬──────────────────────────────────┘
                                │ user-data-dir unique
                                ▼
-┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-│ Chrome       │  │ Chrome       │  │ Chrome       │
-│ profile      │  │ profile      │  │ profile      │
-│ account_aaa  │  │ account_bbb  │  │ account_nnn  │
-│ Session TT 1 │  │ Session TT 2 │  │ Session TT N │
-└──────────────┘  └──────────────┘  └──────────────┘
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│ Chrome       │  │ Chrome       │  │ Chrome       │  │ Chrome       │
+│ _watcher     │  │ account_aaa  │  │ account_bbb  │  │ account_nnn  │
+│ Détection    │  │ Session TT 1 │  │ Session TT 2 │  │ Session TT N │
+└──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘
 ```
 
 ### 2.2 Flux métier central
@@ -438,7 +450,7 @@ Unicité : couple `(account_id, artist_id)`.
 | Champ | Contraintes |
 | --- | --- |
 | `status` | `new` \| `queued` \| `processed` \| `ignored` |
-| `source` | `official_api` \| `manual` \| `import` \| `simulation` |
+| `source` | `official_api` \| `manual` \| `import` \| `selenium_watch` \| `simulation` |
 | Unicité | `video_id` s’il est connu, sinon URL normalisée |
 
 ### 4.5 `rules.json`
@@ -595,6 +607,9 @@ Recalculable à tout moment depuis `tasks` + `history` (source de vérité). `st
   "chrome_path": "",
   "chromedriver_path": "",
   "watch_interval_seconds": 15,
+  "watch_enabled": true,
+  "watcher_profile": "_watcher",
+  "watch_posts_limit": 8,
   "browser_timeout_seconds": 30,
   "browser_warmup_seconds": 8,
   "verbose_logs": true,
@@ -1273,31 +1288,33 @@ App privée ≠ app exposée. Session, CSRF, `.htaccess` deny, `php` jamais en l
 **M. Tests d’intégration Selenium**  
 Non reproductibles en CI sans Chrome + profils. Séparer tests unitaires (calcul `scheduled_at`, locks, restart) et tests navigateur optionnels.
 
-### 15.3 Décisions proposées (à valider)
+### 15.3 Décisions
 
-| # | Décision | Proposition |
+| # | Décision | Statut |
 | --- | --- | --- |
-| 1 | Base de temps des délais | `detected_at` |
-| 2 | Target sans rule | Pas de tâche + warning UI |
-| 3 | Warmup Chrome | `browser_warmup_seconds` (défaut 8), `scheduled_at` inchangé |
-| 4 | Tâche `running` après crash worker | `failed` + retry manuel |
-| 5 | Détection auto V1 | Stub officiel + manuel + simulation |
-| 6 | Queue | `tasks.json` = file globale, pas de second fichier |
-| 7 | Dispatch `NEW_POST` | Synchrone PHP |
-| 8 | `delay_seconds` | Entier ≥ 0 en V1 |
-| 9 | Retry | Nouvel essai sans modifier le `scheduled_at` d’origine (champ `original_scheduled_at` conservé) ; l’exécution réelle est `now` si l’échéance est passée |
-| 10 | Auth dashboard | Un utilisateur dans `users.json`, hash bcrypt |
+| Warmup Chrome | `browser_warmup_seconds` (défaut 8), `scheduled_at` inchangé | **Validé** |
+| Détection V1 | Option B : poller Selenium des profils artistes | **Validé** |
+| 1 | Arborescence étendue vs CDC strict | **À valider** |
+| 4 | Tâche `running` après crash worker → `failed` + retry manuel | **À valider** |
+| 5 | Fichiers `events.json` / `users.json` / `worker_state.json` | **À valider** |
+| A | Base de temps des délais = `detected_at` | Défaut proposé |
+| B | Target sans rule → pas de tâche + warning UI | Défaut proposé |
+| C | File globale = `tasks.json` | Défaut proposé |
+| D | `NEW_POST` dispatch synchrone PHP | Défaut proposé |
+| E | `delay_seconds` entier ≥ 0 en V1 | Défaut proposé |
+| F | Retry : horaire d’origine conservé, exécution à `now` si passé | Défaut proposé |
+| G | Auth dashboard : un user, hash bcrypt | Défaut proposé |
 
 ---
 
-## Points ouverts pour validation
+## Points encore ouverts
 
-Avant d’écrire le code, confirmation souhaitée sur :
+Il reste **3 choix bloquants** avant le code :
 
-1. Arborescence étendue (fichiers ajoutés §1) — OK ou strictement le CDC sans extras ?
-2. Warmup navigateur (§9.4 / 15.B) — OK ?
-3. Détection V1 limitée à manuel + simulation + stub API officielle — OK ?
-4. Tâches orphelines `running` → `failed` plutôt que retry automatique — OK ?
-5. `events.json` / `users.json` / `worker_state.json` — OK ?
+1. **Arborescence** — étendue (recommandé) ou strictement le listing du CDC ?
+2. **Crash worker** — tâche `running` orpheline → `failed` + retry manuel, ou retry automatique ?
+3. **Fichiers extra** — `events.json` (bus `NEW_POST`), `users.json` (login), `worker_state.json` (heartbeat) : OK ?
 
-Dès validation (éventuellement avec amendements), l’implémentation suivra les phases 1 → 13 du cahier des charges, en commençant par l’architecture technique (config, `JsonStorage`, JSON initiaux, logs), sans générer toute l’application d’un seul coup.
+Les défauts A–G ci-dessus seront appliqués tels quels si tu dis « ok pour le reste ».
+
+Dès ces 3 points tranchés, l’implémentation commence à la phase 1 (config, `JsonStorage`, JSON initiaux, logs).
