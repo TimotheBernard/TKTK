@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "pid": null,
+  "started_at": null,
+  "heartbeat_at": null,
+  "status": "stopped",
+  "next_due_at": null,
+  "last_error": null
+}

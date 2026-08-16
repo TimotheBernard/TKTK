@@ -1,15 +1,24 @@
 # Architecture — TikTok Multi-Account Manager (V1)
 
-**Statut :** proposition d’architecture — validation en cours, pas encore de code applicatif.
+**Statut :** architecture validée — implémentation V1 en cours dans ce dépôt.
 
 Ce document répond aux 15 livrables demandés. Il ne contient pas l’implémentation.
 
-### Décisions déjà validées
+### Décisions validées
 
-| # | Sujet | Décision |
-| --- | --- | --- |
-| 2 | Warmup Chrome | **OK.** `browser_warmup_seconds` (défaut 8). `scheduled_at` inchangé. |
-| 3 | Détection V1 | **Option B.** Poller Selenium des profils artistes (pas seulement l’ajout manuel). |
+| Sujet | Décision |
+| --- | --- |
+| Arborescence | **Étendue** (CDC + fichiers justifiés) |
+| Warmup Chrome | **OK.** `browser_warmup_seconds` (défaut 8). `scheduled_at` inchangé. |
+| Détection V1 | **Option B.** Poller Selenium des profils artistes (profil `_watcher` dédié). Manuel, import, simulation et stub officiel restent des sources secondaires. |
+| Crash worker | Tâches `running` orphelines **relancées automatiquement** (`ready`, `attempts++`). Plafond `max_attempts` (settings) pour éviter une boucle infinie. |
+| Fichiers extra | **OK** : `events.json`, `users.json`, `worker_state.json` (+ `watcher_state.json` pour le poller). |
+| T0 des délais | `detected_at` |
+| Target sans rule | Pas de tâche + warning UI |
+| File globale | `tasks.json` |
+| `NEW_POST` | Dispatch synchrone PHP |
+| `delay_seconds` | Entier ≥ 0 |
+| Auth dashboard | `users.json`, hash bcrypt |
 
 ---
 
@@ -1029,9 +1038,17 @@ Stratégie retenue :
 - À `scheduled_at`, `open_post()` s’exécute.
 - Si le warmup n’est pas prêt, on ouvre quand même à l’heure prévue au mieux, et on journalise l’écart `duration_ms` / `late_ms` dans `details` — **sans réécrire** `scheduled_at`.
 
-### 9.5 Surveillance des publications
+### 9.5 Surveillance des publications (option B)
 
-Si `watch_interval_seconds` est écoulé, le worker (ou un second tick PHP CLI) appelle `POST /api/posts.php?action=detect` **ou** un petit script PHP CLI `php worker/detect.php` pour rester dans le métier PHP. Recommandation : **la détection reste côté PHP** (providers), le worker Python ne fait que la file de tâches. Un timer dans le worker peut déclencher le binaire PHP.
+Le worker exécute `watch_loop.py` toutes les `watch_interval_seconds` :
+
+1. `php bin/watch-targets.php` liste les artistes uniques liés à un target `enabled` + `check_new_posts`.
+2. Un Chrome **dédié** `selenium/profiles/_watcher/` (pas un compte géré) ouvre chaque profil artiste.
+3. `BrowserActions.list_profile_posts()` extrait les URLs `/video/{id}`.
+4. Chaque post inédit est envoyé à `php bin/ingest.php` → `PostService` → `NEW_POST` → tâches.
+5. Une erreur watcher n’interrompt pas les tâches des comptes.
+
+L’ajout manuel, l’import, la simulation et un stub d’API officielle restent des sources secondaires.
 
 ### 9.6 Arrêt propre
 
@@ -1043,9 +1060,10 @@ SIGTERM → plus de nouvelles tâches, attendre les `running` jusqu’à timeout
 
 ### 10.1 Producteurs
 
-- Provider officiel (si configuré)
+- Poller Selenium (`_watcher`) — source principale V1
 - Ajout manuel d’URL
 - Import
+- Provider officiel (stub si non configuré)
 - `SimulationService` (DEV_MODE)
 
 ### 10.2 Pipeline
@@ -1251,10 +1269,10 @@ L’API continue : création de comptes, `NEW_POST`, génération de tâches. Au
 `flock` + fichier `.lock` + rename atomique est viable en V1 **mono-machine**. Ce n’est pas un vrai moteur de queue : contention, fichiers qui grossissent (`history.json`), risque de rewrite complet à chaque insert. Mitigation : compaction / rotation d’historique ; abstraction `StorageInterface` dès le premier commit. Migration SQLite recommandée dès que l’historique dépasse quelques milliers de lignes.
 
 **B. Démarrage Chrome vs délai de 2 secondes**  
-Sans warmup, l’objectif « ouvrir à T+2s » est irréaliste. Le warmup (§9.4) est **obligatoire** pour coller au CDC. À valider.
+Sans warmup, l’objectif « ouvrir à T+2s » est irréaliste. Le warmup (§9.4) est **validé**.
 
 **C. Détection des nouvelles publications**  
-TikTok ne fournit pas une API publique simple « derniers posts de n’importe quel @user » pour une appli privée. Un provider officiel peut être indisponible. L’ajout manuel et la simulation marchent toujours. Un scraper Selenium « poller les profils artistes » serait fragile, coûteux, et contraire à l’esprit « mécanismes officiels d’abord ». **V1 : manuel + simulation + stub officiel.** La surveillance automatique n’est branchée que si un provider autorisé est configuré.
+V1 = **option B** : poller Selenium sur les profils artistes via le profil `_watcher`, plus ajout manuel / simulation. Le DOM TikTok est fragile : échec isolé (`SESSION_EXPIRED` sur le watcher), pas d’arrêt du scheduler de tâches. L’API officielle reste un provider optionnel (stub si non configuré).
 
 **D. RAM / N Chromes simultanés**  
 Pas de plafond fonctionnel, mais 10 Chrome ≈ plusieurs Go. Les tâches au même timestamp peuvent toutes échouer pour ressource. C’est acceptable vis-à-vis du CDC (échec isolé) ; il faut le montrer dans les logs, pas le masquer par un stagger.
@@ -1288,33 +1306,20 @@ App privée ≠ app exposée. Session, CSRF, `.htaccess` deny, `php` jamais en l
 **M. Tests d’intégration Selenium**  
 Non reproductibles en CI sans Chrome + profils. Séparer tests unitaires (calcul `scheduled_at`, locks, restart) et tests navigateur optionnels.
 
-### 15.3 Décisions
+### 15.3 Décisions — toutes tranchées
 
-| # | Décision | Statut |
+| Sujet | Décision | Statut |
 | --- | --- | --- |
-| Warmup Chrome | `browser_warmup_seconds` (défaut 8), `scheduled_at` inchangé | **Validé** |
-| Détection V1 | Option B : poller Selenium des profils artistes | **Validé** |
-| 1 | Arborescence étendue vs CDC strict | **À valider** |
-| 4 | Tâche `running` après crash worker → `failed` + retry manuel | **À valider** |
-| 5 | Fichiers `events.json` / `users.json` / `worker_state.json` | **À valider** |
-| A | Base de temps des délais = `detected_at` | Défaut proposé |
-| B | Target sans rule → pas de tâche + warning UI | Défaut proposé |
-| C | File globale = `tasks.json` | Défaut proposé |
-| D | `NEW_POST` dispatch synchrone PHP | Défaut proposé |
-| E | `delay_seconds` entier ≥ 0 en V1 | Défaut proposé |
-| F | Retry : horaire d’origine conservé, exécution à `now` si passé | Défaut proposé |
-| G | Auth dashboard : un user, hash bcrypt | Défaut proposé |
+| Arborescence | Étendue | Validé |
+| Warmup Chrome | `browser_warmup_seconds` = 8, `scheduled_at` inchangé | Validé |
+| Détection V1 | Option B : poller Selenium + sources secondaires | Validé |
+| Crash worker | Relance automatique (`ready`, `attempts++`, plafond `max_attempts`) | Validé |
+| Fichiers extra | `events.json`, `users.json`, `worker_state.json`, `watcher_state.json` | Validé |
+| T0 des délais | `detected_at` | Validé |
+| Target sans rule | Pas de tâche + warning UI | Validé |
+| File globale | `tasks.json` | Validé |
+| `NEW_POST` | Dispatch synchrone PHP | Validé |
+| `delay_seconds` | Entier ≥ 0 | Validé |
+| Auth dashboard | `users.json`, bcrypt | Validé |
 
----
-
-## Points encore ouverts
-
-Il reste **3 choix bloquants** avant le code :
-
-1. **Arborescence** — étendue (recommandé) ou strictement le listing du CDC ?
-2. **Crash worker** — tâche `running` orpheline → `failed` + retry manuel, ou retry automatique ?
-3. **Fichiers extra** — `events.json` (bus `NEW_POST`), `users.json` (login), `worker_state.json` (heartbeat) : OK ?
-
-Les défauts A–G ci-dessus seront appliqués tels quels si tu dis « ok pour le reste ».
-
-Dès ces 3 points tranchés, l’implémentation commence à la phase 1 (config, `JsonStorage`, JSON initiaux, logs).
+L’implémentation suit les phases 1 → 13 du cahier des charges.
