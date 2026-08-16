@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "updated_at": "2026-08-16T00:00:00.000Z",
+  "scheduler_enabled": true,
+  "selenium_enabled": true,
+  "python_path": "python3",
+  "chrome_path": "",
+  "chromedriver_path": "",
+  "watch_interval_seconds": 15,
+  "watch_enabled": true,
+  "watcher_profile": "_watcher",
+  "watch_posts_limit": 8,
+  "browser_timeout_seconds": 30,
+  "browser_warmup_seconds": 8,
+  "verbose_logs": true,
+  "dev_mode": true,
+  "timezone": "UTC",
+  "dashboard_poll_ms": 1000,
+  "worker_poll_ms": 100,
+  "stale_running_timeout_seconds": 120,
+  "max_attempts": 5,
+  "backup_keep": 50
+}

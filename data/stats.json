@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "updated_at": "2026-08-16T00:00:00.000Z",
+  "totals": {
+    "accounts": 0,
+    "accounts_enabled": 0,
+    "artists": 0,
+    "posts_detected": 0,
+    "tasks_generated": 0,
+    "tasks_completed": 0,
+    "tasks_failed": 0,
+    "errors": 0,
+    "avg_execution_ms": 0
+  },
+  "per_account": {}
+}
