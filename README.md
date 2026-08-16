@@ -2,7 +2,9 @@
 
 Application web privée pour gérer plusieurs comptes TikTok : sessions Chrome isolées, surveillance d’artistes, tâches planifiées à la seconde.
 
-Architecture : voir [ARCHITECTURE.md](./ARCHITECTURE.md).
+Architecture V1 : voir [ARCHITECTURE.md](./ARCHITECTURE.md).
+
+**TKTKNUEVA V2** — rapport d’écart et plan de migration (à valider avant toute réécriture) : [MIGRATION_PLAN.md](./MIGRATION_PLAN.md).
 
 ## Accès
 
