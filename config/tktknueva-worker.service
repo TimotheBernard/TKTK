@@ -1,0 +1,16 @@
+[Unit]
+Description=TKTKNUEVA realtime worker
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/tktknueva
+EnvironmentFile=-/var/www/tktknueva/.env
+ExecStart=/usr/bin/python3 /var/www/tktknueva/worker/scheduler.py
+Restart=always
+RestartSec=3
+User=www-data
+Group=www-data
+
+[Install]
+WantedBy=multi-user.target

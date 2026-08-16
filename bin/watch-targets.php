@@ -2,31 +2,14 @@
 
 declare(strict_types=1);
 
-require dirname(__DIR__) . '/includes/bootstrap.php';
+require dirname(__DIR__) . '/app/bootstrap.php';
 
-if (PHP_SAPI !== 'cli') {
-    http_response_code(403);
-    exit("CLI only\n");
-}
-
+$ids = App::targets()->watchedArtistIds();
 $artists = [];
-foreach (App::targets()->watchedArtistIds() as $artistId) {
-    $artist = App::artists()->get($artistId);
-    if ($artist === null || empty($artist['enabled'])) {
-        continue;
+foreach ($ids as $id) {
+    $artist = App::artists()->get($id);
+    if ($artist !== null && !empty($artist['enabled'])) {
+        $artists[] = $artist;
     }
-    $artists[] = [
-        'id' => $artist['id'],
-        'username' => $artist['username'],
-        'tiktok_url' => $artist['tiktok_url'] ?? ('https://www.tiktok.com/' . $artist['username']),
-    ];
 }
-
-echo json_encode([
-    'success' => true,
-    'data' => [
-        'artists' => $artists,
-        'settings' => App::settings()->get(),
-    ],
-    'error' => null,
-], JSON_UNESCAPED_SLASHES) . PHP_EOL;
+fwrite(STDOUT, json_encode(['success' => true, 'data' => ['artists' => $artists]]) . PHP_EOL);

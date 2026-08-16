@@ -10,21 +10,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
+from worker.capability_resolver import resolve
 from worker.json_store import JsonStore
 from worker.queue_manager import QueueManager
 
 
 def main() -> int:
-    tmp = Path(tempfile.mkdtemp(prefix="tktk-py-"))
+    tmp = Path(tempfile.mkdtemp(prefix="tktknueva-py-"))
     try:
-        for src in (ROOT / "data").glob("*.json"):
-            shutil.copy(src, tmp / src.name)
         store = JsonStore(tmp)
         queue = QueueManager(store)
         store.write(
             "tasks",
             {
-                "version": 1,
+                "version": 2,
                 "items": [
                     {
                         "id": "task_a",
@@ -58,6 +57,10 @@ def main() -> int:
         assert ids == ["task_a", "task_b", "task_c"], ids
         stamps = {t["scheduled_at"] for t in due}
         assert stamps == {"2026-08-16T18:00:05.000Z"}
+        assert resolve("WAIT", {}) == "local"
+        assert resolve("PUBLISH_POST", {"tiktok_api_enabled": True, "tiktok_client_key": "x"}) == "api"
+        assert resolve("OPEN_POST", {"selenium_enabled": False}) == "simulate"
+        assert resolve("OPEN_POST", {"selenium_enabled": True}) == "browser"
         print("OK python scheduler tests")
         return 0
     finally:

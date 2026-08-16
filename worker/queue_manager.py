@@ -14,7 +14,7 @@ class QueueManager:
         due = []
         for task in self.all_tasks():
             status = task.get("status")
-            if status not in ("pending", "ready"):
+            if status not in ("pending", "ready", "queued"):
                 continue
             scheduled = task.get("scheduled_at") or ""
             if scheduled <= now_iso:
@@ -24,7 +24,7 @@ class QueueManager:
     def mark_ready_if_due(self, now_iso: str) -> None:
         def mutator(items: list[dict]) -> list[dict]:
             for item in items:
-                if item.get("status") == "pending" and (item.get("scheduled_at") or "") <= now_iso:
+                if item.get("status") in ("pending", "queued") and (item.get("scheduled_at") or "") <= now_iso:
                     item["status"] = "ready"
             return items
 
@@ -38,7 +38,7 @@ class QueueManager:
             for item in items:
                 if item.get("id") != task_id:
                     continue
-                if item.get("status") not in ("pending", "ready"):
+                if item.get("status") not in ("pending", "ready", "queued"):
                     return items
                 item["status"] = "running"
                 item["started_at"] = _now()
@@ -65,7 +65,7 @@ class QueueManager:
         upcoming = [
             t.get("scheduled_at")
             for t in self.all_tasks()
-            if t.get("status") in ("pending", "ready") and t.get("scheduled_at")
+            if t.get("status") in ("pending", "ready", "queued") and t.get("scheduled_at")
         ]
         return min(upcoming) if upcoming else None
 

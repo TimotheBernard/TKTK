@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "items": [
+    {
+      "id": "scenario_example",
+      "account_id": "account_example",
+      "artist_id": "artist_example",
+      "label": "Scenario 01",
+      "trigger": "NEW_POST",
+      "timing": { "type": "fixed", "delay_seconds": 5 },
+      "steps": [
+        { "type": "OPEN_POST" },
+        { "type": "WATCH", "value": "100%" },
+        { "type": "WAIT", "seconds": 5 },
+        { "type": "USER_CONFIRMATION" }
+      ],
+      "enabled": true
+    }
+  ]
+}

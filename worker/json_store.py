@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import fcntl
 import json
 import os
@@ -8,12 +10,13 @@ from pathlib import Path
 from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA = ROOT / "data"
+DATA = Path(os.environ.get("TKTK_DATA_PATH") or (ROOT / "data"))
 
 
 class JsonStore:
     def __init__(self, base: Path | None = None) -> None:
-        self.base = base or DATA
+        self.base = Path(base) if base else DATA
+        self.base.mkdir(parents=True, exist_ok=True)
 
     def path(self, name: str) -> Path:
         safe = "".join(ch for ch in name if ch.isalnum() or ch in "_-")
@@ -44,7 +47,7 @@ class JsonStore:
     def read(self, name: str) -> dict[str, Any]:
         with self.lock(name, exclusive=False) as path:
             if not path.is_file():
-                return {"version": 1, "items": []}
+                return {"version": 2, "items": []}
             with path.open("r", encoding="utf-8") as fh:
                 return json.load(fh)
 
@@ -54,7 +57,7 @@ class JsonStore:
 
     def mutate_items(self, name: str, mutator: Callable[[list[dict[str, Any]]], list[dict[str, Any]]]) -> list[dict[str, Any]]:
         with self.lock(name, exclusive=True) as path:
-            doc = {"version": 1, "items": []}
+            doc = {"version": 2, "items": []}
             if path.is_file():
                 with path.open("r", encoding="utf-8") as fh:
                     doc = json.load(fh)

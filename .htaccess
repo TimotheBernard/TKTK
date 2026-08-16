@@ -1,8 +1,5 @@
-DirectoryIndex index.php
-Options -Indexes
-
-<IfModule mod_authz_core.c>
-    <FilesMatch "^\.">
-        Require all denied
-    </FilesMatch>
-</IfModule>
+RewriteEngine On
+RewriteRule ^(data|profiles|uploads|logs|app|config|worker|browser|bin|tests)/ - [F]
+RewriteRule ^\.env - [F]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^ public/index.php [L]
